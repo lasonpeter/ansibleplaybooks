@@ -15,7 +15,7 @@
           - lvm2
         state: present
         update_cache: true
-        become: true
+      become: true
     - name: Tworzenie grupy woluminów dla AdGuard Home
       lvg:
         vg: "{{vg}}"
