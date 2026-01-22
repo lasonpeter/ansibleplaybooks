@@ -1,0 +1,62 @@
+- name: Kopia zapasowa AdGuard Home
+  hosts: AGH_Adamski
+  become: true
+  vars:
+    date: "{{ansible_date_time.date}}"
+    tmp_remote_dir: "/tmp/adguard_backup_{{date}}.tar.gz"
+    local_dir: "/home/ansible/ansible/backups/adguard"
+  tasks:
+    - block:
+      - name: Tworzenie tymczasowego archiwum plików z danymi AdGuard Home
+        archive:
+          path:
+            - /adguardhome/AdGuardHome/data
+            - /adguardhome/AdGuardHome/AdGuardHome.yaml
+          dest: "{{tmp_remote_dir}}"
+          format: gz
+        ignore_errors: yes
+      - name: Tworzenie lokalizacji dla kopii zapawowych z Ansible
+        delegate_to: localhost
+        file:
+          path: "{{local_dir}}"
+          state: directory
+          owner: ansible
+          group: ansible
+          mode: "0755"
+        become: false
+      - name: Pobieranie kopii zapasowej na maszynę Ansible_Adamski
+        fetch:
+          src: "{{tmp_remote_dir}}"
+          dest: "{{local_dir}}/"
+          flat: yes
+        become: false
+      - name: Usuwanie tymczasowego archiwum z kopią zapasową AdGuard Home (na AGH_Adamski)
+        file:
+          path: "{{tmp_remote_dir}}"
+          state: absent
+      rescue:
+      - name: Wpisanie informacji o błędzie do pliku adguard_backup_error.log
+        copy:
+          dest: /var/log/ansible_update_error.log
+          content: |
+            Wykonanie kopii zapasowej AdGuard Home zakończyło się niepowodzeniem
+            Dane: {{ ansible_date_time.iso8601 }}
+            Host: {{ inventory_hostname }}
+      - name: Wyświetlenie informacji o błędzie na konsoli
+        debug:
+          msg: "Wykonanie kopii zapasowej AdGuard Home zakończyło się niepowodzeniem, informacje o błędzie zostały umieszczone w pliku /var/log/adguard_backup_error.log"
+      - name: Wysyłanie maila z informacją o błędzie
+        become: true
+        ansible.builtin.command:
+          cmd: /usr/bin/msmtp mar.cin1.adamski@gmail.com
+          stdin: |
+            To: mar.cin1.adamski@gmail.com
+            Subject: Ansible: Błąd kopii zapasowej AdGuard Home
+            
+            Podczas wykonywania działania tworzenia kopii zapasowej AdGuard Home wystąpił błąd
+            Host: {{ inventory_hostname }}
+            Data: {{ ansible_date_time.iso8601 }}
+      always:
+      - name: Informacja o zakończeniu działania
+        debug:
+          msg: "Działanie wykonywania kopii zapasowej AdGuard zostało zakończone"

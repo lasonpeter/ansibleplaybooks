@@ -1,0 +1,41 @@
+- name: Aktualizacja Linuxa
+  hosts: linux
+  become: true
+  tasks:
+  - block:
+      - name: Aktualizacja listy dostępnych pakietów
+        apt:
+          update_cache: yes
+          cache_valid_time: 3600
+      - name: Aktualizacja pakietów
+        apt: 
+          upgrade: dist
+      - name: Automatyczne usuwanie przestarzałych pakietów
+        apt:
+          autoremove: yes
+    rescue:
+      - name: Wpisanie informacji o błędzie do pliku ansible_update_error.log
+        copy:
+          dest: /var/log/ansible_update_error.log
+          content: |
+            Aktualizcja zakończyła się niepowodzeniem
+            Dane: {{ ansible_date_time.iso8601 }}
+            Host: {{ inventory_hostname }}
+      - name: Wyświetlenie informacji o błędzie na konsoli
+        debug:
+          msg: "Aktualizacja zakończyła się niepowodzeniem, informacje o błędzie zostały umieszczone w pliku /var/log/ansible_update_error.log"
+      - name: Wysyłanie maila z informacją o błędzie
+        become: true
+        ansible.builtin.command:
+          cmd: /usr/bin/msmtp mar.cin1.adamski@gmail.com
+          stdin: |
+            To: mar.cin1.adamski@gmail.com
+            Subject: Ansible: Błąd aktualizacji systemu
+            
+            Podczas wykonywania działania aktualizacji systemu wystąpił błąd
+            Host: {{ inventory_hostname }}
+            Data: {{ ansible_date_time.iso8601 }}
+    always:
+      - name: Informacja o zakończeniu działania
+        debug:
+          msg: "Działanie aktualizacji systemu zostało zakończone"

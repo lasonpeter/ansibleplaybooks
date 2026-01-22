@@ -1,0 +1,144 @@
+- name: Tworzenie woluminu RAID dla AdGuard Home
+  hosts: AGH_Adamski
+  gather_facts: true
+  become: true
+  vars:
+    adg_dir: /adguardhome
+    vg: adg_vg
+    lv: adg_lv
+    file_system: ext4
+    ag_ver: latest
+  tasks:
+    - name: Instalacja Logical Volume Manager
+      apt:
+        name:
+          - lvm2
+        state: present
+        update_cache: true
+    - name: Tworzenie grupy woluminów dla AdGuard Home
+      lvg:
+        vg: "{{vg}}"
+        pvs:
+          - /dev/sdb
+          - /dev/sdc
+    - name: Tworzenie woluminu logicznego {{lv}} w RAID1
+      lvol:
+        vg: "{{vg}}"
+        lv: "{{lv}}"
+        size: +100%FREE
+        opts: "--type raid1 -m 1"
+    - name: Formatowanie woluminu logicznego korzystając z systemu plików {{file_system}}
+      filesystem:
+        fstype: "{{file_system}}"
+        dev: "/dev/{{vg}}/{{lv}}"
+    - name: Tworzenie Katalogu {adg_dir}
+      file:
+        path: "{{adg_dir}}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+    - name: Montowanie woluminu do katalogu {{adg_dir}}
+      mount:
+        path: "{{adg_dir}}"
+        src: "/dev/{{vg}}/{{lv}}"
+        fstype: "{{file_system}}"
+        state: mounted
+- name: Instalacja AdGuard Home
+  hosts: AGH_Adamski
+  gather_facts: true
+  become: true
+  vars:
+    adg_install_dir: /adguardhome
+    adg_tmp_dir: /tmp/adguardhome
+  tasks:
+    - name: Pobieranie pakietu tar do wypakowywania archiwów
+      apt:
+        name:
+          - tar
+        state: present
+        update_cache: true
+    - name: Tworzenie tymczasowego katalogu AdGuard Home
+      file:
+        path: "{{adg_tmp_dir}}"
+        state: directory
+        mode: "0755"
+    - name: Pobieranie archwium AdGuard Home
+      get_url:
+        url: https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz
+        dest: "{{adg_tmp_dir}}/adguardhome.tar.gz"
+        mode: "0644"
+    - name: Rozpakowanie archiwum AdGuard Home
+      unarchive:
+        src: "{{adg_tmp_dir}}/adguardhome.tar.gz"
+        dest: "{{adg_install_dir}}"
+        remote_src: yes
+    - name: Instalacja AdGuard Home z panelem na porcie 3001
+      command: ./AdGuardHome -s install --port 3001
+      args:
+        chdir: "{{adg_install_dir}}/AdGuardHome"
+        creates: /etc/systemd/system/AdGuardHome.service
+    - name: Uruchomienie AdGuard Home
+      systemd:
+        name: AdGuardHome
+        state: started
+        enabled: true
+- name: Instalacja i konfiguracja zapory ogniowej 
+  hosts: AGH_Adamski
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Instalacja zapory ogniowej UFW
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
+    - name: Przywracanie UFW do ustawień domyślnych
+      ufw:
+        state: reset
+    - name: Domyślne blokowanie połączeń przychodzących
+      ufw:
+        direction: incoming
+        default: deny
+    - name: Domyślne przepuszczanie połączeń odchodzących
+      ufw:
+        direction: outgoing
+        default: allow
+    - name: Otwarcie portu SSH
+      ufw:
+        rule: allow
+        port: 22
+        proto: tcp
+    - name: Otwarcie portu 3000 (Semaphore)
+      ufw:
+        rule: allow
+        port: 3000
+        proto: tcp
+    - name: Otwarcie portu 3001 (AdGuard Home)
+      ufw:
+        rule: allow
+        port: 3001
+        proto: tcp
+    - name: Otwarcie portu 53 (DNS UDP)
+      ufw:
+        rule: allow
+        port: 53
+        proto: udp
+    - name: Otwarcie portu 53 (DNS TCP)
+      ufw:
+        rule: allow
+        port: 53
+        proto: tcp
+    - name: Otwarcie portu 80 (Interfejs sieciowy AdGuard Home)
+      ufw:
+        rule: allow
+        port: 80
+        proto: tcp
+    - name: Otwarcie portu 443 (Interfejs sieciowy AdGuard Home)
+      ufw:
+        rule: allow
+        port: 443
+        proto: tcp
+    - name: Włączenie zapory ogniowej oraz jej autostartu
+      ufw:
+        state: enabled

@@ -1,0 +1,30 @@
+- name: Instalowanie MTA umożliwiającego wysyłanie maili
+  hosts: AGH_Adamski
+  become: true
+  tasks:
+    - name: Instalacja MSMTP i jego MTA.
+      apt:
+        name: 
+        - msmtp
+        - msmtp-mta
+        state: present
+        update_cache: true
+    - name: Konfiguracja MSMTP
+      become: yes
+      copy:
+        dest: /etc/msmtprc
+        content: |
+          defaults
+          auth on
+          tls on
+          tls_trust_file /etc/ssl/certs/ca-certificates.crt
+          logfile /var/log/msmtp.log
+
+          account gmail
+          host smtp.gmail.com
+          port 587
+          from ansibleerrortest@gmail.com
+          user ansibleerrortest@gmail.com
+          password fdcs fuoo jzhg oqlj
+          account default: gmail
+        mode: '0600'

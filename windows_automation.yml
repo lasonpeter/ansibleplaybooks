@@ -1,0 +1,73 @@
+- name: Automatyzacja serwera Windows - Magazyn i Udział sieciowy
+  hosts: WINSRV_Adamski
+  gather_facts: no
+  vars:
+    surname: Adamski
+    dr_letter: F
+    pool_name: StoragePool_{{surname}}
+    vd_name: VirtualDisk_{{surname}}
+    group_name: Kierownicy_{{surname}}
+    share_name: Projekty{{surname}}
+    share_dir: "{{dr_letter}}:\\Projekty"
+  tasks:
+  - name: Pula Dyskowa, Tiering, Wirtualny Dysk i System Plików.
+    ansible.windows.win_powershell:
+      script: |
+        if(-not (Get-StoragePool -FriendlyName "{{ pool_name }}" -ErrorAction SilentlyContinue)) {
+          New-StoragePool -FriendlyName "{{pool_name}}" -StorageSubSystemFriendlyName "Windows Storage*" -PhysicalDisks (Get-PhysicalDisk | Where-Object CanPool -eq $True)
+          Get-PhysicalDisk | Where-Object MediaType -eq "Unspecified" | Set-PhysicalDisk -MediaType HDD
+          Get-StoragePool {{pool_name}} | New-StorageTier -FriendlyName SSD -MediaType SSD
+          Get-StoragePool {{pool_name}} | New-StorageTier -FriendlyName HDD -MediaType HDD
+          $SSD = Get-StorageTier -FriendlyName SSD
+          $HDD = Get-StorageTier -FriendlyName HDD
+          Get-StoragePool {{pool_name}} | Set-ResiliencySetting -Name Mirror -NumberOfColumnsDefault 1
+          Get-StoragePool {{pool_name}} | New-VirtualDisk -FriendlyName "{{vd_name}}" -ResiliencySettingName Mirror -StorageTiers @($SSD,$HDD) -StorageTierSizes @(((Get-StoragePool {{pool_name}} | Get-PhysicalDisk | Where-Object MediaType -eq "SSD" | Measure-Object -Property Size -Sum).Sum*0.4), ((Get-StoragePool {{pool_name}} | Get-PhysicalDisk | Where-Object MediaType -eq "HDD" | Measure-Object -Property Size -Sum).Sum*0.4))
+          New-Volume -DiskNumber (Get-VirtualDisk -FriendlyName "{{vd_name}}" | Get-Disk).Number -FriendlyName "{{share_name}}" -FileSystem ReFS -DriveLetter {{dr_letter}}
+        }
+  - name: Tworzenie użytkowników
+    win_user:
+      name: "{{item.username}}"
+      password: "{{item.password}}"
+      state: present
+    loop:
+      - {username: "Marek.Romanek", password: "Zaq12wsx"}
+      - {username: "Jacek.Gula", password: "Zaq12wsx"}
+  - name: Tworzenie grupy Kierownicy_Adamski
+    win_group:
+      name: "{{group_name}}"
+      state: present
+  - name: Dodawanie Marka Romanka i Jacka Guli do grupy Kierownicy.
+    win_group_membership:
+      name: "{{group_name}}"
+      members:
+        - Marek.Romanek
+        - Jacek.Gula
+      state: present
+  - name: Tworzenie katalogu projekty
+    win_file:
+      path: "{{share_dir}}"
+      state: directory
+  - name: Udostępnianie katalogu Projekty w sieci pod nazwą Projekty_Adamski
+    win_share:
+      name: "{{share_name}}"
+      path: "{{share_dir}}"
+      full: "{{group_name}},Administrators"
+      state: present
+  - name: Instalowanie pakietu chocolatey
+    win_chocolatey:
+      name: chocolatey
+      state: present
+  - name: Instalowanie aplikacji 7zip, bind-toolsonly (która zawiera dig) i Firefox
+    win_chocolatey:
+      name: "{{item}}"
+      state: present
+    loop:
+      - 7zip
+      - bind-toolsonly
+      - firefox
+  - name: Wpis do rejestru zapobiegający usuwaniu drukarek
+    win_regedit:
+      path: HKLM:\Software\Policies\Microsoft\Windows NT\Printers
+      name: DisableDeletePrinter
+      data: 1
+      type: dword
