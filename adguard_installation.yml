@@ -22,6 +22,7 @@
         pvs:
           - /dev/sdb
           - /dev/sdc
+      become: true
     - name: Tworzenie woluminu logicznego {{lv}} w RAID1
       lvol:
         vg: "{{vg}}"
