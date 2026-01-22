@@ -1,5 +1,5 @@
 - name: Tworzenie woluminu RAID dla AdGuard Home
-  hosts: AGH_Adamski
+  hosts: AGH_Lason
   gather_facts: true
   become: true
   vars:
@@ -45,7 +45,7 @@
         fstype: "{{file_system}}"
         state: mounted
 - name: Instalacja AdGuard Home
-  hosts: AGH_Adamski
+  hosts: AGH_Lason
   gather_facts: true
   become: true
   vars:
@@ -84,7 +84,7 @@
         state: started
         enabled: true
 - name: Instalacja i konfiguracja zapory ogniowej 
-  hosts: AGH_Adamski
+  hosts: AGH_Lason
   gather_facts: true
   become: true
   tasks:
